@@ -1,0 +1,9 @@
+{
+  "qTestUrl": "https://your-qtest-instance.qtestnet.com/",
+  "auth": {
+    "username": "your.email@company.com",
+    "password": "your-password",
+    "clientCredentials": "base64-encoded-credentials"
+  }
+}
+

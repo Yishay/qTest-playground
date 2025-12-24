@@ -1,0 +1,28 @@
+{
+  "name": "qtest-reporting",
+  "version": "1.1.0",
+  "description": "qTest test execution reporting tool - generates reports of test executions by user and date",
+  "main": "dist/report.js",
+  "scripts": {
+    "build": "tsc",
+    "report": "ts-node src/report.ts",
+    "report:prod": "node dist/report.js"
+  },
+  "keywords": [
+    "qtest",
+    "reporting",
+    "testing",
+    "test execution"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.2"
+  }
+}
+
