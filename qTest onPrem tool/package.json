@@ -1,0 +1,28 @@
+{
+  "name": "qtest-onprem-tool",
+  "version": "1.0.0",
+  "description": "qTest on-premise data extraction tool - generates event-based JSON files for test execution data",
+  "main": "dist/extract.js",
+  "scripts": {
+    "build": "tsc",
+    "extract": "ts-node src/extract.ts",
+    "extract:prod": "node dist/extract.js"
+  },
+  "keywords": [
+    "qtest",
+    "test-execution",
+    "data-extraction",
+    "events"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.2"
+  }
+}
+
