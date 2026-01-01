@@ -1,0 +1,49 @@
+{
+  "qTestUrl": "https://qteststaging2.staging.qtestnet.com",
+  "auth": {
+    "username": "y.haspel@tricentis.com",
+    "password": "hvt_few6tbj0HFJ6cvm",
+    "clientCredentials": "bGluaC1sb2dpbjo="
+  },
+  "sealights": {
+    "backendUrl": "https://dev-staging.dev.sealights.co",
+    "token": "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL0RFVi1zdGFnaW5nLmF1dGguc2VhbGlnaHRzLmlvLyIsImp3dGlkIjoiREVWLXN0YWdpbmcsbmVlZFRvUmVtb3ZlLEFQSUdXLTdmMjZiNzAzLWJjMzctNGNiYS1iNDA1LTZkZjY3MGFjYTBjZiwxNjk3MzUxNDY0ODUxIiwic3ViamVjdCI6InN0YWdpbmdAYWdlbnQiLCJhdWRpZW5jZSI6WyJhZ2VudHMiXSwieC1zbC1yb2xlIjoiYWdlbnQiLCJ4LXNsLXNlcnZlciI6Imh0dHBzOi8vZGV2LXN0YWdpbmcuZGV2LnNlYWxpZ2h0cy5jby9hcGkiLCJzbF9pbXBlcl9zdWJqZWN0IjoiIiwiaWF0IjoxNjk3MzUxNDY0fQ.Qb041bj_O3M402nF5XPoOvduFK62-awNvvFaA0hfGGK-jiRy1tewTvNkB55DpBXp5rdrqvtFyExs-Uqw0qcd9M_EfatE57yOPe5lNPBsjZUJIFMVM52DVD7sehrVgP6FKXLFyvEfSRT3ssgO6kZ6NJpF1yiXhcn3dpP5tuGOeSarZpYN8zn6wgk1kw4WVp5AW2rv51yZMGTpfeayNWOz5fflUb6ZGeoi9XUCfSHFOSZsDWL6imyDYWRtdTofP_Mkh0zO1ZpXNi_nCk6hpH2V9iTDr5k40TkSJf6HkeyoxM9jZQa2f-VD_cP2xrmoijVn0yqyQS4bRCK2mnPj2LtqEzW53mb2B_72Yey_tNgLvVpIBP7k-abjMyDhlFnXYgFBIsa6Y8UY4_sb5Ms0GcmnlFEAufwZDv7IlwO7d8gLevL_xm17pZrfzwh5pEFXv62m64Co51OL5CoIc8a7X9jbLRWKOBABrM8ZIE7Pz9FChnrBCqyBXODEs0d18vLWBKveVsUhHL1sGub5JxFUgi4IMuiqLXc_cSaf0kZwxMX2VNXyM7s3nOKb-mRCFzda9V7uXphCbQ4hlFLr-Zx5o6AxV5YMnULdTd1tAoyXrYfFGLdJ-tbtWO0IyP6jg-b35D898mBUXKKTWJKCkq-yr_4HT0gn_Z7ZzAi5BZnJ5ZNUoU0"
+  },
+  "userLabMapping": {
+    "y.haspel@tricentis.com": "some-lab-example"
+  },
+  "testStageMapping": {
+    "Sealights / Regression": "Regression",
+    "Sealights / Progression": "Progression",
+    "Sealights / ADMS Integration E2E Tests": "ADMS Integration E2E Tests",
+    "Sealights / ADMS Schematic": "ADMS Schematic",
+    "Sealights / Alarms": "Alarms",
+    "Sealights / API Test Automation": "API Test Automation",
+    "Sealights / APC Functional Test Cases": "APC Functional Test Cases",
+    "Sealights / Archive": "Archive",
+    "Sealights / OMS": "OMS",
+    "Sealights / Hazard Management System": "Hazard Management System",
+    "Sealights / Failover": "Failover",
+    "Sealights / Tagging SCADA": "Tagging SCADA",
+    "Sealights / Interfaces": "Interfaces",
+    "Sealights / Read only mode": "Read only mode",
+    "Sealights / Permission Manager": "Permission Manager",
+    "Sealights / File updater": "File updater",
+    "Sealights / EOMS": "EOMS",
+    "Sealights / Crew Management": "Crew Management",
+    "Sealights / SIM": "SIM",
+    "Sealights / Customer Model Compatible": "Customer Model Compatible",
+    "Sealights / Tools": "Tools",
+    "Sealights / DMS": "DMS",
+    "Sealights / DOTS": "DOTS",
+    "Sealights / Extended Tests": "Extended Tests",
+    "Sealights / DNAF": "DNAF",
+    "Sealights / Cyber Security": "Cyber Security",
+    "Sealights / Modelling": "Modelling",
+    "Sealights / BRT": "BRT"
+  },
+  "recommendations": {
+    "skipStatusName": "SL Skipped",
+    "enableMockMode": true
+  }
+}

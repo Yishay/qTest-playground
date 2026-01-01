@@ -1,0 +1,60 @@
+{
+  "name": "qtest-onprem-tool",
+  "version": "1.0.0",
+  "description": "qTest on-premise data extraction tool - generates event-based JSON files for test execution data",
+  "main": "dist/extract.js",
+  "scripts": {
+    "build": "tsc",
+    "extract": "ts-node src/extract.ts",
+    "extract:prod": "node dist/extract.js",
+    "recommendations": "ts-node src/recommendations.ts",
+    "recommendations:prod": "node dist/recommendations.js",
+    "bulk-import": "ts-node src/bulk-import-tests.ts",
+    "bulk-import:prod": "node dist/bulk-import-tests.js",
+    "debug-hierarchy": "ts-node src/debug-hierarchy.ts",
+    "list-projects": "ts-node src/list-projects.ts",
+    "debug-api": "ts-node src/debug-api.ts",
+    "debug-releases": "ts-node src/debug-releases.ts",
+    "debug-full": "ts-node src/debug-full-hierarchy.ts",
+    "debug-nested": "ts-node src/debug-nested-cycles.ts",
+    "test-nav": "ts-node src/test-navigator.ts",
+    "debug-statuses": "ts-node src/debug-statuses.ts",
+    "debug-fields": "ts-node src/debug-fields.ts",
+    "debug-runs": "ts-node src/debug-test-runs.ts",
+    "debug-testrun": "ts-node src/debug-testrun-full.ts",
+    "test-update": "ts-node src/test-update.ts",
+    "test-methods": "ts-node src/test-update-methods.ts",
+    "test-log": "ts-node src/test-via-log.ts",
+    "test-log-simple": "ts-node src/test-log-simple.ts",
+    "debug-test-design": "ts-node src/debug-test-design.ts",
+    "debug-bulk": "ts-node src/debug-bulk-import.ts",
+    "debug-nav": "ts-node src/debug-navigate.ts",
+    "debug-api": "ts-node src/debug-api-variations.ts",
+    "test-query": "ts-node src/test-query-params.ts",
+    "test-run": "ts-node src/test-run-creation.ts",
+    "verify-run": "ts-node src/verify-test-run.ts",
+    "find-suite": "ts-node src/find-test-suite.ts",
+    "test-full": "ts-node src/test-full-import.ts",
+    "debug-failed": "ts-node src/debug-failed-test.ts",
+    "debug-hierarchy": "ts-node src/debug-test-hierarchy.ts",
+    "test-filtering": "ts-node src/test-testStage-filtering.ts",
+    "test-create-cycle": "ts-node src/test-create-cycle.ts"
+  },
+  "keywords": [
+    "qtest",
+    "test-execution",
+    "data-extraction",
+    "events"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.2"
+  }
+}
+

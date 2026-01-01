@@ -1,0 +1,27 @@
+{
+  "metadata": {
+    "appName": "Sealights",
+    "branchName": "main",
+    "buildName": "build-123",
+    "testStage": "ADMS Integration E2E Tests",
+    "testGroupId": "group-1",
+    "testSelectionEnabled": true,
+    "isFullRun": false,
+    "status": "ready",
+    "fullRunReason": ""
+  },
+  "excludedTests": [
+    {
+      "testName": "test 1"
+    },{
+      "testName": "Some Test"
+    },
+    {
+      "testName": "Another Test"
+    },
+    {
+      "testName": "Automation testing test"
+    }
+  ]
+}
+
