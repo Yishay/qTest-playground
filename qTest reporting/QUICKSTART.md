@@ -53,6 +53,15 @@ npm run report -- --all
 # Specific project only
 npm run report -- --project 1636
 
+# Filter by test stage (requires testStageMapping in config)
+npm run report -- --stage "Regression"
+
+# Filter by lab (requires userLabMapping in config)
+npm run report -- --lab "lab-01"
+
+# Combined filtering
+npm run report -- --stage "Regression" --lab "lab-01"
+
 # Get help
 npm run report -- --help
 ```

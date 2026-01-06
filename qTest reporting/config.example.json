@@ -9,6 +9,11 @@
     "ProjectName / SuiteName": "Logical Stage Name",
     "Example / Regression Suite": "Regression",
     "Example / Progression Suite": "Progression"
+  },
+  "userLabMapping": {
+    "john.doe@company.com": "lab-01",
+    "jane.smith@company.com": "lab-02",
+    "qa.team@company.com": "qa-lab"
   }
 }
 

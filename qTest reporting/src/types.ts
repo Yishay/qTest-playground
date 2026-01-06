@@ -3,6 +3,7 @@ export interface Config {
   qTestUrl: string;
   auth: AuthConfig;
   testStageMapping?: Record<string, string>; // Optional mapping of suite/cycle paths to logical test stages
+  userLabMapping?: Record<string, string>; // Optional mapping of user emails to lab IDs
 }
 
 export interface AuthConfig {

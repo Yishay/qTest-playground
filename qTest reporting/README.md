@@ -102,6 +102,62 @@ If you have a test in project "Sealights" with suite "Regression Suite", it will
 - `"Sealights / Regression Suite": "Regression"` ✅ (recommended)
 - `"Regression Suite": "Regression"` ✅ (less specific)
 
+### User Lab Mapping (Optional)
+
+You can optionally configure user-to-lab mapping to track which lab/environment each user runs tests in:
+
+```json
+{
+  "qTestUrl": "https://your-qtest-instance.qtestnet.com/",
+  "auth": {
+    "username": "your.email@company.com",
+    "password": "your-password",
+    "clientCredentials": "bGluaC1sb2dpbjo="
+  },
+  "userLabMapping": {
+    "john.doe@company.com": "lab-01",
+    "jane.smith@company.com": "lab-02",
+    "qa.team@company.com": "qa-lab",
+    "dev.team@company.com": "dev-lab"
+  }
+}
+```
+
+**What userLabMapping does:**
+- ✅ Adds "Lab ID" column to CSV output
+- ✅ Associates test executions with lab/environment IDs
+- ✅ Enables filtering by `--lab` option
+- ✅ Adds lab statistics to console and JSON output
+- ✅ Groups output by test stage and lab combinations
+
+**Use cases:**
+- Track which tests run in which lab environment
+- Separate production, staging, and dev test executions
+- Analyze test performance by lab
+- Filter reports for specific lab environments
+
+**Example:**  
+If user "john.doe@company.com" runs tests, they will be tagged with "lab-01".
+
+**JSON Output Structure:**  
+Reports are organized by test stage and lab combination in `executionsByStageAndLab`:
+```json
+{
+  "executionsByStageAndLab": [
+    {
+      "testStage": "Integration",
+      "labId": "lab-01",
+      "tests": [...]
+    },
+    {
+      "testStage": "Regression",
+      "labId": "lab-02",
+      "tests": [...]
+    }
+  ]
+}
+```
+
 ## Usage
 
 ### Basic Commands
@@ -144,6 +200,7 @@ npm run report:prod -- --days 30
 | `--all` | Show all test executions regardless of date | `--all` |
 | `--project <ID>` | Only query specific project by ID | `--project 1636` |
 | `--stage <name>` | Filter by test stage name (requires testStageMapping) | `--stage "Regression"` |
+| `--lab <id>` | Filter by lab ID (requires userLabMapping) | `--lab "lab-01"` |
 | `--help`, `-h` | Show help message | `--help` |
 
 ## Output

@@ -2,6 +2,29 @@
 
 All notable changes to the qTest Reporting Tool will be documented in this file.
 
+## [1.3.0] - 2026-01-06
+
+### Added
+- **User Lab Mapping**: Optional `userLabMapping` configuration to associate users with lab/environment IDs
+- **Enhanced CSV Output**: Added Lab ID column (now 12 columns total)
+- **Lab Filtering**: New `--lab` command-line option to filter reports by lab ID
+- **New JSON Structure**: Replaced `executionsByDateAndUser` with `executionsByStageAndLab` for better organization
+- **Lab Statistics**: Lab information in console output and JSON summary
+- **Combined Filtering**: Support for filtering by both stage and lab simultaneously
+
+### Changed
+- **CSV Format**: Expanded from 11 to 12 columns (added Lab ID after User Email)
+- **JSON Output**: Replaced `executionsByDateAndUser` with `executionsByStageAndLab` structure
+- **Console Output**: Simplified to show grouped summary by test stage and lab combination
+- **JSON Summary**: Added `labs` array when mapping is enabled
+
+### Features
+- Lab mapping based on user email addresses
+- Flexible configuration - works with or without lab mapping
+- Lab-based filtering with helpful error messages showing available labs
+- Support for multiple filters (e.g., `--stage "Regression" --lab "lab-01"`)
+- Organized output by test stage and lab combinations
+
 ## [1.2.0] - 2026-01-06
 
 ### Added

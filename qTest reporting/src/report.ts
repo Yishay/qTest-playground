@@ -18,23 +18,25 @@ interface TestExecution {
   testCycle?: string;      // Test cycle name
   testSuite?: string;      // Test suite name
   testStage?: string;      // Logical test stage (from mapping)
+  labId?: string;          // Lab ID (from user lab mapping)
 }
 
-interface DailyUserReport {
-  date: string;
-  user: string;
-  userEmail: string;
+interface StageLabGroup {
+  testStage: string;
+  labId: string;
   tests: {
     testName: string;
     testCaseId: number;
+    executionDate: string;
     startTime: string;
     endTime: string;
     durationMinutes: number;
     status: string;
+    user: string;
+    userEmail: string;
     projectName: string;
     testCycle?: string;
     testSuite?: string;
-    testStage?: string;
   }[];
 }
 
@@ -80,6 +82,7 @@ function parseArgs() {
   let showAll = false;
   let projectId: number | undefined;
   let testStage: string | undefined;
+  let labId: string | undefined;
   
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--days' && i + 1 < args.length) {
@@ -93,6 +96,9 @@ function parseArgs() {
     } else if (args[i] === '--stage' && i + 1 < args.length) {
       testStage = args[i + 1];
       i++;
+    } else if (args[i] === '--lab' && i + 1 < args.length) {
+      labId = args[i + 1];
+      i++;
     } else if (args[i] === '--help' || args[i] === '-h') {
       console.log(`
 Usage: npm run report [options]
@@ -102,20 +108,23 @@ Options:
   --all            Show all test executions regardless of date
   --project <ID>   Only query specific project by ID
   --stage <name>   Filter by test stage name (requires testStageMapping in config)
+  --lab <id>       Filter by lab ID (requires userLabMapping in config)
   --help, -h       Show this help message
 
 Examples:
-  npm run report                           # Last 7 days
-  npm run report -- --days 30              # Last 30 days
-  npm run report -- --all                  # All test executions
-  npm run report -- --project 1636         # Only project 1636
-  npm run report -- --stage "Regression"   # Only Regression stage tests
+  npm run report                              # Last 7 days
+  npm run report -- --days 30                 # Last 30 days
+  npm run report -- --all                     # All test executions
+  npm run report -- --project 1636            # Only project 1636
+  npm run report -- --stage "Regression"      # Only Regression stage tests
+  npm run report -- --lab "lab-01"            # Only lab-01 tests
+  npm run report -- --stage "Regression" --lab "lab-01"  # Combined filtering
       `);
       process.exit(0);
     }
   }
   
-  return { days, showAll, projectId, testStage };
+  return { days, showAll, projectId, testStage, labId };
 }
 
 /**
@@ -179,6 +188,25 @@ function applyTestStageMapping(
     if (key && testStageMapping[key]) {
       return testStageMapping[key];
     }
+  }
+
+  return undefined;
+}
+
+/**
+ * Apply lab ID mapping to an execution record based on user email
+ */
+function applyUserLabMapping(
+  execution: TestExecution,
+  userLabMapping: Record<string, string>
+): string | undefined {
+  if (!userLabMapping || Object.keys(userLabMapping).length === 0) {
+    return undefined;
+  }
+
+  // Direct email match
+  if (execution.userEmail && userLabMapping[execution.userEmail]) {
+    return userLabMapping[execution.userEmail];
   }
 
   return undefined;
@@ -489,6 +517,22 @@ async function generateReport() {
     console.log(`  Mapped ${mappedCount}/${allExecutions.length} executions to test stages\n`);
   }
   
+  // Apply lab mapping if configured
+  if (config.userLabMapping) {
+    console.log(`🔬 Applying user lab mapping...`);
+    let mappedCount = 0;
+    
+    for (const execution of allExecutions) {
+      const labId = applyUserLabMapping(execution, config.userLabMapping);
+      if (labId) {
+        execution.labId = labId;
+        mappedCount++;
+      }
+    }
+    
+    console.log(`  Mapped ${mappedCount}/${allExecutions.length} executions to labs\n`);
+  }
+
   // Filter by test stage if specified
   if (options.testStage) {
     console.log(`🔍 Filtering by test stage: "${options.testStage}"`);
@@ -505,51 +549,91 @@ async function generateReport() {
     }
   }
   
-  // Group by date and user
-  const groupedByDateUser = new Map<string, DailyUserReport>();
+  // Filter by lab if specified
+  if (options.labId) {
+    console.log(`🔬 Filtering by lab: "${options.labId}"`);
+    const beforeCount = allExecutions.length;
+    allExecutions = allExecutions.filter(e => e.labId === options.labId);
+    console.log(`  Filtered: ${allExecutions.length}/${beforeCount} executions match\n`);
+    
+    if (allExecutions.length === 0) {
+      console.log(`⚠️  No test executions found for lab "${options.labId}"`);
+      if (config.userLabMapping) {
+        const availableLabs = Array.from(new Set(Object.values(config.userLabMapping)));
+        console.log(`   Available labs: ${availableLabs.join(', ')}`);
+      }
+      return;
+    }
+  }
+  
+  // Group by test stage and lab
+  const groupedByStageAndLab = new Map<string, StageLabGroup>();
   
   for (const execution of allExecutions) {
-    const key = `${execution.executionDate}|${execution.userEmail}`;
+    const testStage = execution.testStage || 'Unmapped';
+    const labId = execution.labId || 'Unknown';
+    const key = `${testStage}|||${labId}`; // Use delimiter to avoid collisions
     
-    if (!groupedByDateUser.has(key)) {
-      groupedByDateUser.set(key, {
-        date: execution.executionDate,
-        user: execution.user,
-          userEmail: execution.userEmail,
-          tests: [],
+    if (!groupedByStageAndLab.has(key)) {
+      groupedByStageAndLab.set(key, {
+        testStage,
+        labId,
+        tests: [],
       });
     }
     
-    const report = groupedByDateUser.get(key)!;
-    report.tests.push({
+    const group = groupedByStageAndLab.get(key)!;
+    group.tests.push({
       testName: execution.testName,
       testCaseId: execution.testCaseId,
+      executionDate: execution.executionDate,
       startTime: execution.startTime,
       endTime: execution.endTime,
       durationMinutes: execution.durationMinutes,
       status: execution.status,
+      user: execution.user,
+      userEmail: execution.userEmail,
       projectName: execution.projectName,
+      testCycle: execution.testCycle,
+      testSuite: execution.testSuite,
     });
   }
   
-  // Sort reports by date (newest first) and user
-  const sortedReports = Array.from(groupedByDateUser.values()).sort((a, b) => {
-    const dateCompare = b.date.localeCompare(a.date);
-    if (dateCompare !== 0) return dateCompare;
-      return a.user.localeCompare(b.user);
-    });
+  // Sort groups by test stage and lab
+  const executionsByStageAndLab = Array.from(groupedByStageAndLab.values()).sort((a, b) => {
+    const stageCompare = a.testStage.localeCompare(b.testStage);
+    if (stageCompare !== 0) return stageCompare;
+    return a.labId.localeCompare(b.labId);
+  });
 
   // Generate console report
-  console.log('=' .repeat(100));
-  console.log('TEST EXECUTION REPORT BY USER BY DAY');
+  console.log('='.repeat(100));
+  console.log('TEST EXECUTION REPORT');
   if (options.showAll) {
     console.log(`Period: ALL TIME (up to ${formatDate(endDate)})`);
   } else {
     console.log(`Period: ${formatDate(startDate)} to ${formatDate(endDate)} (${options.days} days)`);
   }
-  console.log('=' .repeat(100));
+  console.log('='.repeat(100));
   console.log();
-
+  
+  // Show grouped summary by stage and lab
+  console.log(`Found ${executionsByStageAndLab.length} test stage/lab combination(s):\n`);
+  
+  for (const group of executionsByStageAndLab) {
+    console.log(`📂 Test Stage: ${group.testStage} | 🔬 Lab: ${group.labId}`);
+    console.log(`   Tests: ${group.tests.length}`);
+    console.log(`   Users: ${new Set(group.tests.map((t: any) => t.userEmail)).size}`);
+    console.log(`   Projects: ${Array.from(new Set(group.tests.map((t: any) => t.projectName))).join(', ')}`);
+    console.log();
+  }
+  
+  console.log('='.repeat(100));
+  console.log();
+  
+  // Skip the old detailed daily report
+  if (false) {
+    const sortedReports: any[] = [];
     let currentDate = '';
   for (const report of sortedReports) {
     if (report.date !== currentDate) {
@@ -577,7 +661,7 @@ async function generateReport() {
       console.log(`\n    Project: ${projectName} (${tests.length} tests)`);
       
       // If test stage mapping is configured, group by stage
-      if (config.testStageMapping && tests.some(t => t.testStage)) {
+      if (config.testStageMapping && tests.some((t: any) => t.testStage)) {
         const testsByStage = new Map<string, typeof tests>();
         for (const test of tests) {
           const stage = test.testStage || 'Unmapped';
@@ -607,9 +691,7 @@ async function generateReport() {
       }
     }
   }
-  
-  console.log('\n' + '='.repeat(100));
-  console.log();
+  } // End of if(false) - skipping old detailed report
   
   // Generate JSON report
   const jsonReport = {
@@ -631,9 +713,11 @@ async function generateReport() {
       testStages: config.testStageMapping 
         ? Array.from(new Set(allExecutions.map((e) => e.testStage).filter(Boolean)))
         : undefined,
+      labs: config.userLabMapping
+        ? Array.from(new Set(allExecutions.map((e) => e.labId).filter(Boolean)))
+        : undefined,
     },
-    executionsByDateAndUser: sortedReports,
-    allExecutions: allExecutions,
+    executionsByStageAndLab: executionsByStageAndLab,
   };
   
   // Save JSON report
@@ -648,12 +732,12 @@ async function generateReport() {
   
   // Generate CSV report
   const csvLines = [
-    'Date,User,User Email,Project,Test Cycle,Test Suite,Test Stage,Test Name,Test Case ID,Duration (minutes),Status',
+    'Date,User,User Email,Lab ID,Project,Test Cycle,Test Suite,Test Stage,Test Name,Test Case ID,Duration (minutes),Status',
   ];
   
   for (const execution of allExecutions.sort((a, b) => b.executionDate.localeCompare(a.executionDate))) {
     csvLines.push(
-      `"${execution.executionDate}","${execution.user}","${execution.userEmail}","${execution.projectName}","${execution.testCycle || ''}","${execution.testSuite || ''}","${execution.testStage || ''}","${execution.testName}",${execution.testCaseId},${execution.durationMinutes},"${execution.status}"`
+      `"${execution.executionDate}","${execution.user}","${execution.userEmail}","${execution.labId || ''}","${execution.projectName}","${execution.testCycle || ''}","${execution.testSuite || ''}","${execution.testStage || ''}","${execution.testName}",${execution.testCaseId},${execution.durationMinutes},"${execution.status}"`
     );
   }
   
@@ -670,7 +754,12 @@ async function generateReport() {
   if (jsonReport.summary.testStages && jsonReport.summary.testStages.length > 0) {
     console.log(`  Test Stages: ${jsonReport.summary.testStages.join(', ')}`);
   }
+  if (jsonReport.summary.labs && jsonReport.summary.labs.length > 0) {
+    console.log(`  Labs: ${jsonReport.summary.labs.join(', ')}`);
+  }
   console.log();
+  
+  console.log('Report generation completed successfully.');
 }
 
 // Run the report
