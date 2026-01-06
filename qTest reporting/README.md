@@ -49,7 +49,7 @@ cp config.example.json config.json
   "auth": {
     "username": "your.email@company.com",
     "password": "your-password",
-    "clientCredentials": "base64-encoded-credentials"
+    "clientCredentials": "bGluaC1sb2dpbjo="
   }
 }
 ```
@@ -62,6 +62,45 @@ cp config.example.json config.json
   }
 }
 ```
+
+### Test Stage Mapping (Optional)
+
+You can optionally configure test stage mapping to group tests by logical stages:
+
+```json
+{
+  "qTestUrl": "https://your-qtest-instance.qtestnet.com/",
+  "auth": {
+    "username": "your.email@company.com",
+    "password": "your-password",
+    "clientCredentials": "bGluaC1sb2dpbjo="
+  },
+  "testStageMapping": {
+    "ProjectName / TestSuite": "StageName",
+    "Sealights / Regression Suite": "Regression",
+    "Sealights / Progression Suite": "Progression",
+    "MyProject / Component tests": "Component"
+  }
+}
+```
+
+**What testStageMapping does:**
+- ✅ Adds "Test Stage" column to CSV output
+- ✅ Adds test stage grouping in console output  
+- ✅ Enables filtering by `--stage` option
+- ✅ Adds test stage statistics to JSON output
+
+**Key matching format:**  
+The mapping tries multiple key formats automatically:
+1. Full path: `Project / Cycle / Suite`
+2. Project + Suite: `Project / Suite` (most common)
+3. Suite alone: `SuiteName`
+4. Cycle alone: `CycleName`
+
+**Example:**  
+If you have a test in project "Sealights" with suite "Regression Suite", it will match:
+- `"Sealights / Regression Suite": "Regression"` ✅ (recommended)
+- `"Regression Suite": "Regression"` ✅ (less specific)
 
 ## Usage
 
@@ -104,6 +143,7 @@ npm run report:prod -- --days 30
 | `--days <N>` | Number of days to look back (default: 7) | `--days 30` |
 | `--all` | Show all test executions regardless of date | `--all` |
 | `--project <ID>` | Only query specific project by ID | `--project 1636` |
+| `--stage <name>` | Filter by test stage name (requires testStageMapping) | `--stage "Regression"` |
 | `--help`, `-h` | Show help message | `--help` |
 
 ## Output

@@ -15,6 +15,9 @@ interface TestExecution {
   user: string;
   userEmail: string;
   projectName: string;
+  testCycle?: string;      // Test cycle name
+  testSuite?: string;      // Test suite name
+  testStage?: string;      // Logical test stage (from mapping)
 }
 
 interface DailyUserReport {
@@ -29,6 +32,9 @@ interface DailyUserReport {
     durationMinutes: number;
     status: string;
     projectName: string;
+    testCycle?: string;
+    testSuite?: string;
+    testStage?: string;
   }[];
 }
 
@@ -73,6 +79,7 @@ function parseArgs() {
   let days = 7; // Default to last 7 days
   let showAll = false;
   let projectId: number | undefined;
+  let testStage: string | undefined;
   
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--days' && i + 1 < args.length) {
@@ -83,6 +90,9 @@ function parseArgs() {
     } else if (args[i] === '--project' && i + 1 < args.length) {
       projectId = parseInt(args[i + 1], 10);
       i++;
+    } else if (args[i] === '--stage' && i + 1 < args.length) {
+      testStage = args[i + 1];
+      i++;
     } else if (args[i] === '--help' || args[i] === '-h') {
       console.log(`
 Usage: npm run report [options]
@@ -91,19 +101,21 @@ Options:
   --days <N>       Number of days to look back (default: 7)
   --all            Show all test executions regardless of date
   --project <ID>   Only query specific project by ID
+  --stage <name>   Filter by test stage name (requires testStageMapping in config)
   --help, -h       Show this help message
 
 Examples:
-  npm run report                    # Last 7 days
-  npm run report -- --days 30       # Last 30 days
-  npm run report -- --all           # All test executions
-  npm run report -- --project 1636  # Only project 1636
+  npm run report                           # Last 7 days
+  npm run report -- --days 30              # Last 30 days
+  npm run report -- --all                  # All test executions
+  npm run report -- --project 1636         # Only project 1636
+  npm run report -- --stage "Regression"   # Only Regression stage tests
       `);
       process.exit(0);
     }
   }
   
-  return { days, showAll, projectId };
+  return { days, showAll, projectId, testStage };
 }
 
 /**
@@ -129,6 +141,47 @@ function extractUserId(testLog: QTestTestLog): number | null {
   }
   
   return null;
+}
+
+/**
+ * Apply test stage mapping to an execution record
+ * Tries multiple key variations to find a match
+ */
+function applyTestStageMapping(
+  execution: TestExecution,
+  testStageMapping: Record<string, string>
+): string | undefined {
+  if (!testStageMapping || Object.keys(testStageMapping).length === 0) {
+    return undefined;
+  }
+
+  // Try these keys in order of specificity:
+  const possibleKeys: (string | null)[] = [
+    // Full path: "Project / Cycle / Suite"
+    execution.testCycle && execution.testSuite 
+      ? `${execution.projectName} / ${execution.testCycle} / ${execution.testSuite}`
+      : null,
+    
+    // Project + Suite: "Project / Suite"
+    execution.testSuite 
+      ? `${execution.projectName} / ${execution.testSuite}`
+      : null,
+    
+    // Suite alone: "Suite"
+    execution.testSuite || null,
+    
+    // Cycle alone: "Cycle"
+    execution.testCycle || null,
+  ];
+
+  // Filter out null values and search for a match
+  for (const key of possibleKeys) {
+    if (key && testStageMapping[key]) {
+      return testStageMapping[key];
+    }
+  }
+
+  return undefined;
 }
 
 /**
@@ -185,7 +238,7 @@ async function generateReport() {
     console.log(`\nQuerying test logs from ${formatDate(startDate)} to ${formatDate(endDate)} (${options.days} days)...\n`);
   }
   
-  const allExecutions: TestExecution[] = [];
+  let allExecutions: TestExecution[] = [];
   
   // Query each project
     for (const project of projects) {
@@ -288,6 +341,8 @@ async function generateReport() {
                         user: userName,
                         userEmail: userEmail,
                         projectName: project.name,
+                        testCycle: cycle.name,      // Add test cycle name
+                        testSuite: testSuite.name,  // Add test suite name
                       });
                     }
                   }
@@ -377,6 +432,7 @@ async function generateReport() {
                         user: userName,
                         userEmail: userEmail,
                         projectName: project.name,
+                        testSuite: testSuite.name,  // Add test suite name (no cycle for project-level suites)
                       });
                     }
                   }
@@ -415,6 +471,38 @@ async function generateReport() {
       console.log(`Try running with a longer time period (e.g., --days 90) or --all to see all test executions.`);
     }
     return;
+  }
+  
+  // Apply test stage mapping if configured
+  if (config.testStageMapping) {
+    console.log(`🗺️  Applying test stage mapping...`);
+    let mappedCount = 0;
+    
+    for (const execution of allExecutions) {
+      const mappedStage = applyTestStageMapping(execution, config.testStageMapping);
+      if (mappedStage) {
+        execution.testStage = mappedStage;
+        mappedCount++;
+      }
+    }
+    
+    console.log(`  Mapped ${mappedCount}/${allExecutions.length} executions to test stages\n`);
+  }
+  
+  // Filter by test stage if specified
+  if (options.testStage) {
+    console.log(`🔍 Filtering by test stage: "${options.testStage}"`);
+    const beforeCount = allExecutions.length;
+    allExecutions = allExecutions.filter(e => e.testStage === options.testStage);
+    console.log(`  Filtered: ${allExecutions.length}/${beforeCount} executions match\n`);
+    
+    if (allExecutions.length === 0) {
+      console.log(`⚠️  No test executions found for stage "${options.testStage}"`);
+      if (config.testStageMapping) {
+        console.log(`   Available stages: ${Array.from(new Set(Object.values(config.testStageMapping))).join(', ')}`);
+      }
+      return;
+    }
   }
   
   // Group by date and user
@@ -487,11 +575,35 @@ async function generateReport() {
     
     for (const [projectName, tests] of testsByProject) {
       console.log(`\n    Project: ${projectName} (${tests.length} tests)`);
-      for (const test of tests) {
-        const startTime = new Date(test.startTime).toLocaleTimeString();
-        const endTime = new Date(test.endTime).toLocaleTimeString();
-        console.log(`      - [${test.status}] ${test.testName} (ID: ${test.testCaseId})`);
-        console.log(`        Start: ${startTime} | End: ${endTime} | Duration: ${test.durationMinutes} min`);
+      
+      // If test stage mapping is configured, group by stage
+      if (config.testStageMapping && tests.some(t => t.testStage)) {
+        const testsByStage = new Map<string, typeof tests>();
+        for (const test of tests) {
+          const stage = test.testStage || 'Unmapped';
+          if (!testsByStage.has(stage)) {
+            testsByStage.set(stage, []);
+          }
+          testsByStage.get(stage)!.push(test);
+        }
+        
+        for (const [stage, stageTests] of testsByStage) {
+          console.log(`\n      📂 ${stage} (${stageTests.length} tests)`);
+          for (const test of stageTests) {
+            const startTime = new Date(test.startTime).toLocaleTimeString();
+            const endTime = new Date(test.endTime).toLocaleTimeString();
+            console.log(`        - [${test.status}] ${test.testName} (ID: ${test.testCaseId})`);
+            console.log(`          Start: ${startTime} | End: ${endTime} | Duration: ${test.durationMinutes} min`);
+          }
+        }
+      } else {
+        // No test stage mapping, show tests directly
+        for (const test of tests) {
+          const startTime = new Date(test.startTime).toLocaleTimeString();
+          const endTime = new Date(test.endTime).toLocaleTimeString();
+          console.log(`      - [${test.status}] ${test.testName} (ID: ${test.testCaseId})`);
+          console.log(`        Start: ${startTime} | End: ${endTime} | Duration: ${test.durationMinutes} min`);
+        }
       }
     }
   }
@@ -516,6 +628,9 @@ async function generateReport() {
       uniqueUsers: new Set(allExecutions.map((e) => e.userEmail)).size,
       uniqueTests: new Set(allExecutions.map((e) => e.testCaseId)).size,
       projects: Array.from(new Set(allExecutions.map((e) => e.projectName))),
+      testStages: config.testStageMapping 
+        ? Array.from(new Set(allExecutions.map((e) => e.testStage).filter(Boolean)))
+        : undefined,
     },
     executionsByDateAndUser: sortedReports,
     allExecutions: allExecutions,
@@ -533,12 +648,12 @@ async function generateReport() {
   
   // Generate CSV report
   const csvLines = [
-    'Date,User,User Email,Project,Test Name,Test Case ID,Duration (minutes),Status',
+    'Date,User,User Email,Project,Test Cycle,Test Suite,Test Stage,Test Name,Test Case ID,Duration (minutes),Status',
   ];
   
   for (const execution of allExecutions.sort((a, b) => b.executionDate.localeCompare(a.executionDate))) {
     csvLines.push(
-      `"${execution.executionDate}","${execution.user}","${execution.userEmail}","${execution.projectName}","${execution.testName}",${execution.testCaseId},${execution.durationMinutes},"${execution.status}"`
+      `"${execution.executionDate}","${execution.user}","${execution.userEmail}","${execution.projectName}","${execution.testCycle || ''}","${execution.testSuite || ''}","${execution.testStage || ''}","${execution.testName}",${execution.testCaseId},${execution.durationMinutes},"${execution.status}"`
     );
   }
   
@@ -552,6 +667,9 @@ async function generateReport() {
   console.log(`  Unique Users: ${jsonReport.summary.uniqueUsers}`);
   console.log(`  Unique Tests: ${jsonReport.summary.uniqueTests}`);
   console.log(`  Projects: ${jsonReport.summary.projects.join(', ')}`);
+  if (jsonReport.summary.testStages && jsonReport.summary.testStages.length > 0) {
+    console.log(`  Test Stages: ${jsonReport.summary.testStages.join(', ')}`);
+  }
   console.log();
 }
 

@@ -2,6 +2,25 @@
 
 All notable changes to the qTest Reporting Tool will be documented in this file.
 
+## [1.2.0] - 2026-01-06
+
+### Added
+- **Test Stage Mapping**: Optional `testStageMapping` configuration to organize tests by logical stages
+- **Enhanced CSV Output**: Added Test Cycle, Test Suite, and Test Stage columns
+- **Stage Filtering**: New `--stage` command-line option to filter reports by test stage
+- **Hierarchical Console Output**: Tests now grouped by test stage when mapping is configured
+- **Enhanced JSON Output**: Includes test stage information and statistics in summary
+
+### Changed
+- CSV format expanded from 8 to 11 columns (added Test Cycle, Test Suite, Test Stage)
+- Console output now shows test stage grouping with 📂 icon when mapping is configured
+- JSON summary now includes `testStages` array when mapping is enabled
+
+### Features
+- Test stage mapping tries multiple key formats automatically (Project/Cycle/Suite, Project/Suite, Suite, Cycle)
+- Flexible mapping configuration - works with or without test stage mapping
+- Stage-based filtering with helpful error messages showing available stages
+
 ## [1.1.0] - 2025-12-23
 
 ### Added
