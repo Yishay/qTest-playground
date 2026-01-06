@@ -3,7 +3,12 @@
   "auth": {
     "username": "your.email@company.com",
     "password": "your-password",
-    "clientCredentials": "base64-encoded-credentials"
+    "clientCredentials": "bGluaC1sb2dpbjo="
+  },
+  "testStageMapping": {
+    "ProjectName / SuiteName": "Logical Stage Name",
+    "Example / Regression Suite": "Regression",
+    "Example / Progression Suite": "Progression"
   }
 }
 
