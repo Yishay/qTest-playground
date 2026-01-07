@@ -95,6 +95,11 @@ The mapping tries multiple key formats automatically:
 1. Full path: `Project / Cycle / Suite`
 2. Project + Suite: `Project / Suite` (most common)
 3. Suite alone: `SuiteName`
+
+**⚠️ Important:** If no mapping matches a test, the tool will use the qTest path as the test stage (e.g., "eTerraDistribution / Grid Tabular"). This means:
+- You don't need to map every test suite
+- Only map the test suites you want to give custom stage names
+- Unmapped tests will still appear in reports with their qTest path as the stage name
 4. Cycle alone: `CycleName`
 
 **Example:**  

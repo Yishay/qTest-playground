@@ -1,12 +1,15 @@
 {
   "name": "qtest-reporting",
-  "version": "1.3.0",
+  "version": "1.3.2",
   "description": "qTest test execution reporting tool with test stage and lab mapping support",
   "main": "dist/report.js",
   "scripts": {
     "build": "tsc",
     "report": "ts-node src/report.ts",
-    "report:prod": "node dist/report.js"
+    "report:prod": "node dist/report.js",
+    "test-auth": "ts-node src/test-auth.ts",
+    "test-auth:prod": "node dist/test-auth.js",
+    "inspect-logs": "ts-node src/inspect-test-logs.ts"
   },
   "keywords": [
     "qtest",

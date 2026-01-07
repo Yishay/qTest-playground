@@ -1,0 +1,35 @@
+{
+  "_comment_url": "Your qTest URL - must end with /",
+  "qTestUrl": "https://your-qtest-instance.qtestnet.com/",
+  
+  "_comment_auth": "Choose ONE authentication method below",
+  
+  "_comment_method1": "METHOD 1: Bearer Token (Recommended - Simpler)",
+  "_comment_bearer_where": "Get from qTest: Resources > API & SDK",
+  "_comment_bearer_important": "DO NOT include 'Bearer ' word - copy only the token value",
+  "_comment_bearer_options": "Use either the short 'Bearer Token' (e.g., 6cea2472-...) OR the long 'Token' value (bmVw...)",
+  "auth": {
+    "bearerToken": "your-token-here-without-bearer-word"
+  },
+  
+  "_comment_method2": "METHOD 2: OAuth (Username/Password)",
+  "_comment_oauth": "Uncomment and use this instead of bearerToken if preferred",
+  "auth_alternative": {
+    "username": "your.email@company.com",
+    "password": "your-password",
+    "clientCredentials": "bGluaC1sb2dpbjo="
+  },
+  
+  "_comment_optional": "Optional mappings below",
+  "testStageMapping": {
+    "ProjectName / SuiteName": "Logical Stage Name",
+    "Example / Regression Suite": "Regression",
+    "Example / Progression Suite": "Progression"
+  },
+  "userLabMapping": {
+    "john.doe@company.com": "lab-01",
+    "jane.smith@company.com": "lab-02",
+    "qa.team@company.com": "qa-lab"
+  }
+}
+

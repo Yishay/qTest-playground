@@ -8,8 +8,8 @@ interface TestExecution {
   testName: string;
   testCaseId: number;
   executionDate: string;
-  startTime: string;
-  endTime: string;
+  startTime: string | undefined; // May be undefined in some qTest versions
+  endTime: string | undefined; // May be undefined in some qTest versions
   durationMinutes: number;
   status: string;
   user: string;
@@ -154,17 +154,14 @@ function extractUserId(testLog: QTestTestLog): number | null {
 
 /**
  * Apply test stage mapping to an execution record
- * Tries multiple key variations to find a match
+ * Builds a key from qTest hierarchy and checks if it's mapped
+ * If mapped, returns the mapped value; otherwise returns the key itself as the test stage name
  */
 function applyTestStageMapping(
   execution: TestExecution,
   testStageMapping: Record<string, string>
-): string | undefined {
-  if (!testStageMapping || Object.keys(testStageMapping).length === 0) {
-    return undefined;
-  }
-
-  // Try these keys in order of specificity:
+): string {
+  // Build possible keys in order of specificity (same logic as before)
   const possibleKeys: (string | null)[] = [
     // Full path: "Project / Cycle / Suite"
     execution.testCycle && execution.testSuite 
@@ -176,21 +173,26 @@ function applyTestStageMapping(
       ? `${execution.projectName} / ${execution.testSuite}`
       : null,
     
-    // Suite alone: "Suite"
-    execution.testSuite || null,
-    
-    // Cycle alone: "Cycle"
-    execution.testCycle || null,
+    // Full path: "Project / Cycle / Suite"
+    execution.testCycle 
+      ? `${execution.projectName} / ${execution.testCycle}`
+      : null,
   ];
 
-  // Filter out null values and search for a match
+  // Try each key in order of specificity
   for (const key of possibleKeys) {
-    if (key && testStageMapping[key]) {
-      return testStageMapping[key];
+    if (key) {
+      // If this key has a mapping, return the mapped value
+      if (testStageMapping && testStageMapping[key]) {
+        return testStageMapping[key];
+      }
+      // Otherwise, use the key itself as the test stage name
+      return key;
     }
   }
 
-  return undefined;
+  // Fallback if no keys could be built (should rarely happen)
+  return execution.projectName || 'Unknown';
 }
 
 /**
@@ -323,7 +325,26 @@ async function generateReport() {
                   totalTestLogs += testLogs.length;
                   
                   for (const testLog of testLogs) {
-                    const executionDateTime = new Date(testLog.exe_end_date);
+                    // Use fallback logic for date field (handles qTest On-Prem 2024.2.1.1 and other versions)
+                    // Priority: exe_end_date > exe_start_date > test_step_logs[0].exe_date
+                    const dateValue = testLog.exe_end_date || 
+                                      testLog.exe_start_date || 
+                                      (testLog.test_step_logs && testLog.test_step_logs[0]?.exe_date);
+                    
+                    // Validate date before using
+                    if (!dateValue) {
+                      console.warn(`      Warning: Test log ${testLog.id} has no execution date fields, skipping`);
+                      continue;
+                    }
+                    
+                    const executionDateTime = new Date(dateValue);
+                    
+                    // Validate parsed date
+                    if (isNaN(executionDateTime.getTime())) {
+                      console.warn(`      Warning: Test log ${testLog.id} has invalid date format (${dateValue}), skipping`);
+                      continue;
+                    }
+                    
                     if (executionDateTime >= startDate && executionDateTime <= endDate) {
                       // Extract user information
                       const userId = extractUserId(testLog);
@@ -352,9 +373,9 @@ async function generateReport() {
                         }
                       }
                       
-                      // Calculate duration in minutes
-                      const startDateTime = new Date(testLog.exe_start_date);
-                      const endDateTime = new Date(testLog.exe_end_date);
+                      // Calculate duration in minutes (with fallback)
+                      const startDateTime = new Date(testLog.exe_start_date || dateValue);
+                      const endDateTime = new Date(testLog.exe_end_date || testLog.exe_start_date || dateValue);
                       const durationMs = endDateTime.getTime() - startDateTime.getTime();
                       const durationMinutes = Math.round(durationMs / 60000 * 100) / 100; // Round to 2 decimal places
                       
@@ -362,8 +383,8 @@ async function generateReport() {
                         testName: testName,
                         testCaseId: testCaseId,
                         executionDate: formatDate(executionDateTime),
-                        startTime: testLog.exe_start_date,
-                        endTime: testLog.exe_end_date,
+                        startTime: testLog.exe_start_date || dateValue,
+                        endTime: testLog.exe_end_date || testLog.exe_start_date || dateValue,
                         durationMinutes: durationMinutes,
                         status: testLog.status.name,
                         user: userName,
@@ -414,7 +435,26 @@ async function generateReport() {
                   totalTestLogs += testLogs.length;
                   
                   for (const testLog of testLogs) {
-                    const executionDateTime = new Date(testLog.exe_end_date);
+                    // Use fallback logic for date field (handles qTest On-Prem 2024.2.1.1 and other versions)
+                    // Priority: exe_end_date > exe_start_date > test_step_logs[0].exe_date
+                    const dateValue = testLog.exe_end_date || 
+                                      testLog.exe_start_date || 
+                                      (testLog.test_step_logs && testLog.test_step_logs[0]?.exe_date);
+                    
+                    // Validate date before using
+                    if (!dateValue) {
+                      console.warn(`      Warning: Test log ${testLog.id} has no execution date fields, skipping`);
+                      continue;
+                    }
+                    
+                    const executionDateTime = new Date(dateValue);
+                    
+                    // Validate parsed date
+                    if (isNaN(executionDateTime.getTime())) {
+                      console.warn(`      Warning: Test log ${testLog.id} has invalid date format (${dateValue}), skipping`);
+                      continue;
+                    }
+                    
                     if (executionDateTime >= startDate && executionDateTime <= endDate) {
                       // Extract user information
                       const userId = extractUserId(testLog);
@@ -444,8 +484,8 @@ async function generateReport() {
                       }
                       
                       // Calculate duration in minutes
-                      const startDateTime = new Date(testLog.exe_start_date);
-                      const endDateTime = new Date(testLog.exe_end_date);
+                      const startDateTime = new Date(testLog.exe_start_date || dateValue);
+                      const endDateTime = new Date(testLog.exe_end_date || testLog.exe_start_date || dateValue);
                       const durationMs = endDateTime.getTime() - startDateTime.getTime();
                       const durationMinutes = Math.round(durationMs / 60000 * 100) / 100; // Round to 2 decimal places
                       
@@ -501,20 +541,21 @@ async function generateReport() {
     return;
   }
   
-  // Apply test stage mapping if configured
-  if (config.testStageMapping) {
-    console.log(`🗺️  Applying test stage mapping...`);
-    let mappedCount = 0;
-    
-    for (const execution of allExecutions) {
-      const mappedStage = applyTestStageMapping(execution, config.testStageMapping);
-      if (mappedStage) {
-        execution.testStage = mappedStage;
-        mappedCount++;
-      }
-    }
-    
-    console.log(`  Mapped ${mappedCount}/${allExecutions.length} executions to test stages\n`);
+  // Apply test stage mapping (or use qTest path as fallback)
+  console.log(`🗺️  Assigning test stages...`);
+  
+  for (const execution of allExecutions) {
+    const testStage = applyTestStageMapping(
+      execution, 
+      config.testStageMapping || {}
+    );
+    execution.testStage = testStage;
+  }
+  
+  if (config.testStageMapping && Object.keys(config.testStageMapping).length > 0) {
+    const mappedValues = new Set(Object.values(config.testStageMapping));
+    const mappedCount = allExecutions.filter(e => mappedValues.has(e.testStage || '')).length;
+    console.log(`  ${mappedCount} executions matched configured mappings, ${allExecutions.length - mappedCount} using qTest paths\n`);
   }
   
   // Apply lab mapping if configured
@@ -587,8 +628,8 @@ async function generateReport() {
       testName: execution.testName,
       testCaseId: execution.testCaseId,
       executionDate: execution.executionDate,
-      startTime: execution.startTime,
-      endTime: execution.endTime,
+      startTime: execution.startTime || execution.executionDate,
+      endTime: execution.endTime || execution.executionDate,
       durationMinutes: execution.durationMinutes,
       status: execution.status,
       user: execution.user,

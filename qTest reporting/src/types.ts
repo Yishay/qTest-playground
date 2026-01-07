@@ -75,8 +75,8 @@ export interface QTestTestLog {
   id: number;
   test_run_id: number;
   test_case_version_id: number;
-  exe_start_date: string;
-  exe_end_date: string;
+  exe_start_date?: string; // Optional for version compatibility
+  exe_end_date?: string; // Optional for version compatibility (e.g., qTest On-Prem 2024.2.1.1)
   status: QTestStatus;
   name?: string;
   note?: string;
@@ -85,6 +85,18 @@ export interface QTestTestLog {
   test_case?: QTestTestCaseReference;
   user_id?: number;
   properties?: QTestProperty[];
+  test_step_logs?: QTestTestStepLog[]; // For fallback date retrieval
+}
+
+export interface QTestTestStepLog {
+  test_step_log_id: number;
+  test_step_id: number;
+  status: QTestStatus;
+  exe_date?: string;
+  description?: string;
+  expected_result?: string;
+  actual_result?: string;
+  order?: number;
 }
 
 export interface QTestTestCaseReference {

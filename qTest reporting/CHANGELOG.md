@@ -2,6 +2,39 @@
 
 All notable changes to the qTest Reporting Tool will be documented in this file.
 
+## [1.3.2] - 2026-01-07
+
+### Changed
+- **Test Stage Fallback**: When testStageMapping is configured but no mapping matches a test, the tool now uses the qTest path (e.g., "eTerraDistribution / Grid Tabular") instead of marking it as "UNKNOWN"
+- **Improved Output**: Console now shows how many tests matched configured mappings vs. using qTest paths
+- **Better Default Behavior**: All tests now get a meaningful test stage name, even without explicit mapping
+
+### Benefits
+- No need to map every test suite in configuration
+- Only map test suites you want custom stage names for
+- Unmapped tests appear in reports with their qTest path, making them easy to identify
+- Reduces configuration overhead while maintaining full visibility
+
+## [1.3.1] - 2026-01-07
+
+### Fixed
+- **Version Compatibility**: Added robust date field handling for qTest On-Prem 2024.2.1.1 and other versions
+- **Fallback Logic**: exe_end_date now falls back to exe_start_date or test_step_logs[0].exe_date if not populated
+- **Date Validation**: Added validation to detect and skip test logs with invalid or missing dates
+- **Type Safety**: Made exe_start_date and exe_end_date optional in type definitions
+- **Better Warnings**: Console warnings now show which test logs are skipped and why
+
+### Changed
+- Date field priority: exe_end_date > exe_start_date > test_step_logs[0].exe_date
+- Duration calculation now handles missing date fields gracefully
+- Test logs without ANY date fields are now skipped with warning instead of causing parse errors
+
+### Compatibility
+- ✅ Works with qTest Cloud (all versions)
+- ✅ Works with qTest On-Prem 2024.2.x (including 2024.2.1.1)
+- ✅ Works with qTest On-Prem 2024.1.x
+- ✅ Handles NULL/undefined exe_end_date fields
+
 ## [1.3.0] - 2026-01-06
 
 ### Added
