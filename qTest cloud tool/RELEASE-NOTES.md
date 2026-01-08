@@ -1,5 +1,18 @@
 # qTest Cloud Tool - Release Notes
 
+## Version 3.0.1 - On-Prem Support Fix
+
+### Release Date
+January 1, 2026
+
+### Bug Fixes
+- **Fixed On-Prem Compatibility**: Bulk import now works with both qTest Cloud and On-Prem
+  - Added fallback logic to detect and use On-Prem API patterns
+  - Automatically tries Cloud releases endpoint first, then falls back to On-Prem root cycles
+  - No configuration needed - works automatically for both environments
+
+---
+
 ## Version 3.0 - Bulk Import with Recommendations
 
 ### Release Date

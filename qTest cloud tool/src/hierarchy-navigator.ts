@@ -63,6 +63,7 @@ export class HierarchyNavigator {
 
   /**
    * Get children at project level (releases, test-suites, and test-runs)
+   * Supports both qTest Cloud (releases endpoint) and On-Prem (root cycles)
    */
   private async getProjectChildren(
     projectId: number,
@@ -70,29 +71,67 @@ export class HierarchyNavigator {
   ): Promise<NavigationNode[]> {
     const children: NavigationNode[] = [];
 
-    // 1. Get releases using the correct endpoint
+    // 1. Try to get releases/root cycles (Cloud vs On-Prem support)
+    let foundReleases = false;
+    
+    // Try Cloud approach first: GET /releases endpoint
     try {
       const releasesResponse = await this.apiClient.get(
         `/api/v3/projects/${projectId}/releases`
       );
       let releases = releasesResponse.data || [];
       
-      // Sort releases by order or id
-      releases = this.sortItems(releases);
-      
-      console.log(`   Found ${releases.length} release(s)`);
-      
-      for (const release of releases) {
-        children.push({
-          type: 'cycle',
-          id: release.id,
-          name: release.name,
-          path: [...parentPath, release.name],
-          hasTests: false, // Releases don't have direct test runs
-        });
+      if (releases.length > 0) {
+        foundReleases = true;
+        
+        // Sort releases by order or id
+        releases = this.sortItems(releases);
+        
+        console.log(`   Found ${releases.length} release(s)`);
+        
+        for (const release of releases) {
+          children.push({
+            type: 'cycle',
+            id: release.id,
+            name: release.name,
+            path: [...parentPath, release.name],
+            hasTests: false, // Releases don't have direct test runs
+          });
+        }
       }
     } catch (error: any) {
-      console.log(`   No releases found: ${error.message}`);
+      // Releases endpoint might not exist or return empty in On-Prem
+      console.log(`   No releases found via /releases endpoint`);
+    }
+    
+    // If no releases found via Cloud approach, try On-Prem approach
+    if (!foundReleases) {
+      try {
+        const rootCyclesResponse = await this.apiClient.get(
+          `/api/v3/projects/${projectId}/test-cycles`,
+          { params: { parentId: 0, parentType: 'root' } }
+        );
+        let rootCycles = rootCyclesResponse.data || [];
+        
+        if (rootCycles.length > 0) {
+          // Sort cycles by order or id
+          rootCycles = this.sortItems(rootCycles);
+          
+          console.log(`   Found ${rootCycles.length} root test cycle(s)`);
+          
+          for (const cycle of rootCycles) {
+            children.push({
+              type: 'cycle',
+              id: cycle.id,
+              name: cycle.name,
+              path: [...parentPath, cycle.name],
+              hasTests: false, // Cycles don't have direct test runs
+            });
+          }
+        }
+      } catch (error: any) {
+        console.log(`   No root test cycles found: ${error.message}`);
+      }
     }
 
     // 2. Get test suites at project level (not in releases)
