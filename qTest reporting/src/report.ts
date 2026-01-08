@@ -1,6 +1,7 @@
 import { QTestClient } from './qtest-client';
 import { loadConfig } from './config';
 import { QTestTestLog, QTestUser, QTestProject } from './types';
+import { UserCache } from './user-cache';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -77,7 +78,7 @@ function getTodayDate(): Date {
  * Parse command line arguments
  */
 function parseArgs() {
-  const args = process.argv.slice(2);
+  const args = process.argv.slice(2).filter(arg => arg !== '--'); // Remove standalone '--' tokens
   let days = 7; // Default to last 7 days
   let showAll = false;
   let projectId: number | undefined;
@@ -88,7 +89,7 @@ function parseArgs() {
     if (args[i] === '--days' && i + 1 < args.length) {
       days = parseInt(args[i + 1], 10);
       i++;
-    } else if (args[i] === '--all') {
+    } else if (args[i] === '--all' || args[i] === 'all') {
       showAll = true;
     } else if (args[i] === '--project' && i + 1 < args.length) {
       projectId = parseInt(args[i + 1], 10);
@@ -240,24 +241,9 @@ async function generateReport() {
     console.log(`Filtering to project: ${projects[0].name} (ID: ${options.projectId})`);
   }
   
-  console.log('Fetching users...');
-  let users: QTestUser[] = [];
-  try {
-    users = await client.getUsers();
-    console.log(`Found ${users.length} users`);
-  } catch (error) {
-    console.log('Unable to fetch users list, will use emails from test logs');
-  }
-  
-  // Create user ID to user info maps
-  const userIdToEmailMap = new Map<number, string>();
-  const userIdToNameMap = new Map<number, string>();
-  users.forEach((user) => {
-    const displayName = user.display_name || `${user.first_name} ${user.last_name}`.trim() || user.username;
-    const email = user.email || user.username || `user_${user.id}`;
-    userIdToEmailMap.set(user.id, email);
-    userIdToNameMap.set(user.id, displayName);
-  });
+  // Create user cache for lazy loading (fetch users on demand, not upfront)
+  console.log('Initializing user cache (lazy loading)...');
+  const userCache = new UserCache(client);
   
   const startDate = options.showAll ? new Date(0) : getDaysAgo(options.days);
   const endDate = getTodayDate();
@@ -309,14 +295,16 @@ async function generateReport() {
             console.log(`    Checking test suite: ${testSuite.name} (ID: ${testSuite.id})`);
             
             try {
-              const runsResponse = await apiClient.get(
-                `/api/v3/projects/${project.id}/test-runs`,
-                { params: { parentId: testSuite.id, parentType: 'test-suite', pageSize: 100 } }
+              // Use optimized method with date filtering at API level
+              const testRuns = await client.getTestRunsForSuite(
+                project.id,
+                testSuite.id,
+                options.showAll ? undefined : startDate,
+                options.showAll ? undefined : endDate
               );
               
-              const testRuns = runsResponse.data?.items || [];
               totalTestRuns += testRuns.length;
-              console.log(`      Found ${testRuns.length} test runs`);
+              console.log(`      Found ${testRuns.length} test runs (filtered by date)`);
               
               // Process each test run
               for (const testRun of testRuns) {
@@ -345,15 +333,23 @@ async function generateReport() {
                       continue;
                     }
                     
+                    // NOTE: Date filtering is now done at API level (getTestRunsForSuite with date params)
+                    // This is a safety net in case some test logs slip through with dates outside the range
                     if (executionDateTime >= startDate && executionDateTime <= endDate) {
-                      // Extract user information
+                      // Extract user information (lazy loading - only fetch when needed)
                       const userId = extractUserId(testLog);
                       let userEmail = 'Unknown';
                       let userName = 'Unknown';
                       
                       if (userId) {
-                        userEmail = userIdToEmailMap.get(userId) || `user_${userId}`;
-                        userName = userIdToNameMap.get(userId) || userEmail;
+                        try {
+                          const userInfo = await userCache.getUserInfo(userId);
+                          userEmail = userInfo.email;
+                          userName = userInfo.name;
+                        } catch (error) {
+                          userEmail = `user_${userId}`;
+                          userName = `user_${userId}`;
+                        }
                       } else if (testLog.submitted_by) {
                         // Fallback: if submitted_by is an email
                         userEmail = testLog.submitted_by;
@@ -420,14 +416,16 @@ async function generateReport() {
             console.log(`    Checking test suite: ${testSuite.name} (ID: ${testSuite.id})`);
             
             try {
-              const runsResponse = await apiClient.get(
-                `/api/v3/projects/${project.id}/test-runs`,
-                { params: { parentId: testSuite.id, parentType: 'test-suite', pageSize: 100 } }
+              // Use optimized method with date filtering at API level
+              const testRuns = await client.getTestRunsForSuite(
+                project.id,
+                testSuite.id,
+                options.showAll ? undefined : startDate,
+                options.showAll ? undefined : endDate
               );
               
-              const testRuns = runsResponse.data?.items || [];
               totalTestRuns += testRuns.length;
-              console.log(`      Found ${testRuns.length} test runs`);
+              console.log(`      Found ${testRuns.length} test runs (filtered by date)`);
               
               for (const testRun of testRuns) {
                 try {
@@ -455,15 +453,23 @@ async function generateReport() {
                       continue;
                     }
                     
+                    // NOTE: Date filtering is now done at API level (getTestRunsForSuite with date params)
+                    // This is a safety net in case some test logs slip through with dates outside the range
                     if (executionDateTime >= startDate && executionDateTime <= endDate) {
-                      // Extract user information
+                      // Extract user information (lazy loading - only fetch when needed)
                       const userId = extractUserId(testLog);
                       let userEmail = 'Unknown';
                       let userName = 'Unknown';
                       
                       if (userId) {
-                        userEmail = userIdToEmailMap.get(userId) || `user_${userId}`;
-                        userName = userIdToNameMap.get(userId) || userEmail;
+                        try {
+                          const userInfo = await userCache.getUserInfo(userId);
+                          userEmail = userInfo.email;
+                          userName = userInfo.name;
+                        } catch (error) {
+                          userEmail = `user_${userId}`;
+                          userName = `user_${userId}`;
+                        }
                       } else if (testLog.submitted_by) {
                         // Fallback: if submitted_by is an email
                         userEmail = testLog.submitted_by;
@@ -798,6 +804,10 @@ async function generateReport() {
   if (jsonReport.summary.labs && jsonReport.summary.labs.length > 0) {
     console.log(`  Labs: ${jsonReport.summary.labs.join(', ')}`);
   }
+  
+  // Show user cache statistics
+  const cacheStats = userCache.getCacheStats();
+  console.log(`\n⚡ Performance: Fetched ${cacheStats.cachedUsers} users (lazy loading) instead of all users`);
   console.log();
   
   console.log('Report generation completed successfully.');

@@ -70,11 +70,88 @@ export class QTestClient {
   }
 
   /**
+   * Get Test-Logs for a project with optional date range filtering
+   * This is more efficient than traversing the hierarchy when you need all logs
+   */
+  async getTestLogsForProject(
+    projectId: number,
+    startDate?: Date,
+    endDate?: Date,
+    pageSize: number = 999
+  ): Promise<QTestTestLog[]> {
+    const params: any = {
+      pageSize,
+      page: 1,
+    };
+
+    // Add date filters if provided
+    if (startDate) {
+      params.exe_start_date = startDate.toISOString();
+    }
+    if (endDate) {
+      params.exe_end_date = endDate.toISOString();
+    }
+
+    const response = await this.client.get(
+      `/api/v3/projects/${projectId}/test-logs`,
+      { params }
+    );
+
+    // Handle paginated response format
+    if (response.data && Array.isArray(response.data.items)) {
+      return response.data.items;
+    } else if (Array.isArray(response.data)) {
+      return response.data;
+    }
+
+    return [];
+  }
+
+  /**
    * Get all users in the system
    */
   async getUsers(): Promise<QTestUser[]> {
     const response = await this.client.get<QTestUser[]>('/api/v3/users');
     return response.data;
+  }
+
+  /**
+   * Get Test-Runs for a test suite with optional date range filtering
+   */
+  async getTestRunsForSuite(
+    projectId: number,
+    testSuiteId: number,
+    startDate?: Date,
+    endDate?: Date,
+    pageSize: number = 100
+  ): Promise<QTestTestRun[]> {
+    const params: any = {
+      parentId: testSuiteId,
+      parentType: 'test-suite',
+      pageSize,
+    };
+
+    // Add date filters if provided (filters by execution date)
+    if (startDate) {
+      params.exe_start_date = startDate.toISOString();
+    }
+    if (endDate) {
+      params.exe_end_date = endDate.toISOString();
+    }
+
+    const response = await this.client.get(
+      `/api/v3/projects/${projectId}/test-runs`,
+      { params }
+    );
+
+    // Handle paginated response format
+    if (response.data && Array.isArray(response.data.items)) {
+      return response.data.items;
+    } else if (Array.isArray(response.data)) {
+      return response.data;
+    }
+
+    return [];
   }
 
   /**
