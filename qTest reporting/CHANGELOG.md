@@ -2,6 +2,72 @@
 
 All notable changes to the qTest Reporting Tool will be documented in this file.
 
+## [1.3.7] - 2026-01-11
+
+### Fixed 🐛
+- **Nested Test Cycle Traversal**: Tool now recursively discovers and processes nested test cycles within test cycles
+- **Paginated Response Handling**: Fixed critical bug where test runs under cycles weren't processed due to incorrect pagination handling
+- **Project Filtering**: Enhanced `--project` parameter to accept both project ID and project name
+- **Missing Test Executions**: Resolves issue where test runs in nested cycles (like "level 1", "level 2") were completely missing from reports
+
+### Added
+- **Recursive Test Cycle Processing**: New `processTestCycleRecursively()` function handles nested cycle hierarchies
+- **Test Runs Under Cycles**: Support for test runs that exist directly under test cycles (without test suites)
+- **Enhanced Debug Logging**: Detailed console output shows nested cycle discovery and test run processing
+- **Flexible Project Selection**: `--project` now accepts "ProjectName" or numeric ID
+
+### Changed
+- **Hierarchy Discovery**: Tool now processes: Project → Cycle → Nested Cycle → Test Runs/Suites
+- **Test Stage Naming**: Full cycle paths preserved (e.g., "Project / Parent Cycle / Child Cycle")
+- **API Response Handling**: Properly handles paginated responses for test runs (`data.items` vs `data`)
+
+### Technical Details
+- Fixed pagination bug: `testRuns.data.items` instead of `testRuns.data`
+- Added recursive cycle traversal using `parentType: 'test-cycle'`
+- Enhanced error handling and debug output for nested structures
+- Maintains backward compatibility with non-nested structures
+
+### Impact
+- **Before**: Nested cycles showed "Found 0 test suites" and missed all test runs
+- **After**: All nested cycles discovered, test runs processed, complete data capture
+- **Customer Issue**: Resolved missing test stages from hierarchical cycle structures
+
+## [1.3.6] - 2026-01-11
+
+### Fixed 🐛
+- **Nested Test Suite Traversal**: Tool now recursively traverses nested test suite hierarchies
+- **Missing Test Data**: Fixes issue where test runs in nested child suites were completely missing from reports
+- **Hierarchical Discovery**: Added recursive function to discover suites within suites using `parentType: 'test-suite'`
+
+### Added
+- **Recursive Processing**: New `processTestSuiteRecursively()` function handles nested suite hierarchies
+- **Full Path Preservation**: Test stage names now include complete hierarchy (e.g., "Project / Cycle / Parent Suite / Child Suite")
+- **Visual Depth Indicators**: Console output uses indentation to show nesting depth
+- **Child Suite Detection**: Automatically detects and processes suites nested within other suites
+
+### Changed
+- **Test Suite Processing**: Both cycle-level and project-level suites now use recursive traversal
+- **Test Stage Naming**: Suite paths now reflect full hierarchy when nesting exists
+- **API Calls**: Added calls to fetch child suites with `GET /api/v3/projects/{id}/test-suites?parentId={suiteId}&parentType=test-suite`
+
+### Impact
+- **Before**: Test cycles like "CG_2025_Full_Regression" showed "Found 0 test suites" despite having nested suites
+- **After**: All nested suites (OMS, EOMS, DMS, DNAF, etc.) under parent suites are now discovered and processed
+- **Data Completeness**: Reports now include ALL test executions, not just those in top-level suites
+- **Backward Compatible**: Projects without nested suites work exactly as before
+
+### Technical Details
+- Recursion has no artificial depth limit (handles any nesting level)
+- Error handling preserves robustness (404s on leaf nodes are silently handled)
+- Performance impact minimal (only additional API calls for projects with nesting)
+- Full TypeScript compilation successful with no errors
+
+### Customer Issue Resolved
+- Customer reported missing test stages from "Full Regression Test Suite" structure
+- Root cause: Tool only processed direct children of test cycles, not nested hierarchies
+- RCA confirmed with customer screenshots showing multi-level suite structure
+- Fix verified through successful TypeScript build
+
 ## [1.3.5] - 2026-01-08
 
 ### Performance Optimization 🚀

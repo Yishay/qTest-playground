@@ -1,6 +1,6 @@
 {
   "name": "qtest-reporting",
-  "version": "1.3.5",
+  "version": "1.3.7",
   "description": "qTest test execution reporting tool with test stage and lab mapping support",
   "main": "dist/report.js",
   "scripts": {

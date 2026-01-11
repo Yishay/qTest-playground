@@ -82,6 +82,7 @@ function parseArgs() {
   let days = 7; // Default to last 7 days
   let showAll = false;
   let projectId: number | undefined;
+  let projectName: string | undefined;
   let testStage: string | undefined;
   let labId: string | undefined;
   
@@ -92,7 +93,13 @@ function parseArgs() {
     } else if (args[i] === '--all' || args[i] === 'all') {
       showAll = true;
     } else if (args[i] === '--project' && i + 1 < args.length) {
-      projectId = parseInt(args[i + 1], 10);
+      const projectArg = args[i + 1];
+      const parsedId = parseInt(projectArg, 10);
+      if (!isNaN(parsedId)) {
+        projectId = parsedId;
+      } else {
+        projectName = projectArg;
+      }
       i++;
     } else if (args[i] === '--stage' && i + 1 < args.length) {
       testStage = args[i + 1];
@@ -125,7 +132,7 @@ Examples:
     }
   }
   
-  return { days, showAll, projectId, testStage, labId };
+  return { days, showAll, projectId, projectName, testStage, labId };
 }
 
 /**
@@ -216,6 +223,341 @@ function applyUserLabMapping(
 }
 
 /**
+ * Recursively process a test cycle and its nested child cycles
+ */
+async function processTestCycleRecursively(
+  client: QTestClient,
+  userCache: UserCache,
+  project: QTestProject,
+  testCycle: any,
+  parentCyclePath: string,
+  startDate: Date,
+  endDate: Date,
+  options: any,
+  allExecutions: TestExecution[],
+  depth: number = 0
+): Promise<void> {
+  const indent = '  '.repeat(depth + 1);
+  const currentCyclePath = parentCyclePath ? `${parentCyclePath} / ${testCycle.name}` : testCycle.name;
+  
+  console.log(`${indent}Checking test cycle: ${testCycle.name} (ID: ${testCycle.id})`);
+  
+  try {
+    const apiClient = client.getApiClient();
+    
+    // 1. First, check for test suites within this test cycle
+    try {
+      const suitesResponse = await apiClient.get(
+        `/api/v3/projects/${project.id}/test-suites`,
+        { params: { parentId: testCycle.id, parentType: 'test-cycle' } }
+      );
+      
+      const testSuites = suitesResponse.data || [];
+      console.log(`${indent}  Found ${testSuites.length} test suites in cycle`);
+      
+      // Process each test suite recursively (this will also process nested child suites)
+      for (const testSuite of testSuites) {
+        await processTestSuiteRecursively(
+          client,
+          userCache,
+          project,
+          testSuite,
+          testCycle.name,
+          '', // No parent suite path yet
+          startDate,
+          endDate,
+          options,
+          allExecutions,
+          depth + 1 // Increase depth for suites under cycles
+        );
+      }
+    } catch (error: any) {
+      console.log(`${indent}  Error querying test suites: ${error.message}`);
+    }
+    
+    // 2. Check for test runs directly under this test cycle (no test suite)
+    try {
+      console.log(`${indent}  Checking for test runs directly under cycle ${testCycle.id}...`);
+      const testRuns = await apiClient.get(
+        `/api/v3/projects/${project.id}/test-runs`,
+        { params: { parentId: testCycle.id, parentType: 'test-cycle' } }
+      );
+      
+      // Handle paginated response format (same as other qTest API calls)
+      const runs = testRuns.data?.items || testRuns.data || [];
+      console.log(`${indent}  API returned ${runs.length} test runs directly under cycle`);
+      
+      if (runs.length > 0) {
+        console.log(`${indent}  ✅ Found ${runs.length} test runs directly under cycle`);
+        console.log(`${indent}  Direct test runs:`, runs.slice(0, 3).map((r: any) => `${r.name} (ID: ${r.id})`).join(', '));
+        
+        // Process test runs directly under the cycle
+        for (const testRun of runs) {
+          try {
+            const testLogs = await client.getTestLogsForRun(project.id, testRun.id);
+            
+            for (const testLog of testLogs) {
+              // Use fallback logic for date field
+              const dateValue = testLog.exe_end_date || 
+                                testLog.exe_start_date || 
+                                (testLog.test_step_logs && testLog.test_step_logs[0]?.exe_date);
+              
+              if (!dateValue) {
+                console.warn(`${indent}    Warning: Test log ${testLog.id} has no execution date fields, skipping`);
+                continue;
+              }
+              
+              const executionDateTime = new Date(dateValue);
+              
+              if (isNaN(executionDateTime.getTime())) {
+                console.warn(`${indent}    Warning: Test log ${testLog.id} has invalid date format (${dateValue}), skipping`);
+                continue;
+              }
+              
+              if (executionDateTime >= startDate && executionDateTime <= endDate) {
+                // Extract user information
+                const userId = extractUserId(testLog);
+                let userEmail = 'Unknown';
+                let userName = 'Unknown';
+                
+                if (userId) {
+                  try {
+                    const userInfo = await userCache.getUserInfo(userId);
+                    userEmail = userInfo.email;
+                    userName = userInfo.name;
+                  } catch (error) {
+                    userEmail = `user_${userId}`;
+                    userName = `user_${userId}`;
+                  }
+                } else if (testLog.submitted_by) {
+                  userEmail = testLog.submitted_by;
+                  userName = testLog.submitted_by;
+                }
+                
+                let testName = testRun.name || 'Unknown Test';
+                let testCaseId = testRun.test_case_id || testRun.testCaseId || 0;
+                
+                if (testLog.test_case?.id) {
+                  testCaseId = testLog.test_case.id;
+                  try {
+                    const testCase = await client.getTestCase(project.id, testLog.test_case.id);
+                    testName = testCase.name || testName;
+                  } catch (error) {
+                    testName = testRun.name || `Test Case ${testLog.test_case.id}`;
+                  }
+                }
+                
+                // Calculate duration in minutes
+                const startDateTime = new Date(testLog.exe_start_date || dateValue);
+                const endDateTime = new Date(testLog.exe_end_date || testLog.exe_start_date || dateValue);
+                const durationMs = endDateTime.getTime() - startDateTime.getTime();
+                const durationMinutes = Math.round(durationMs / 60000 * 100) / 100;
+                
+                allExecutions.push({
+                  testName: testName,
+                  testCaseId: testCaseId,
+                  executionDate: formatDate(executionDateTime),
+                  startTime: testLog.exe_start_date || dateValue,
+                  endTime: testLog.exe_end_date || testLog.exe_start_date || dateValue,
+                  durationMinutes: durationMinutes,
+                  status: testLog.status.name,
+                  user: userName,
+                  userEmail: userEmail,
+                  projectName: project.name,
+                  testCycle: currentCyclePath, // Use full cycle path
+                  // No testSuite since this is directly under cycle
+                });
+              }
+            }
+          } catch (error: any) {
+            if (error.response?.status !== 404) {
+              console.log(`${indent}      Warning: Could not fetch test logs for test run ${testRun.id}: ${error.message}`);
+            }
+          }
+        }
+      } else {
+        console.log(`${indent}  No test runs found directly under cycle`);
+      }
+    } catch (error: any) {
+      // This is normal if no test runs exist directly under the cycle
+      console.log(`${indent}  ❌ Error fetching test runs directly under cycle: ${error.response?.status} ${error.response?.statusText}`);
+      if (error.response?.data) {
+        console.log(`${indent}     Error details:`, error.response.data);
+      }
+    }
+    
+    // 3. Now check for NESTED child test cycles within this test cycle
+    try {
+      console.log(`${indent}  Checking for nested child cycles under cycle ${testCycle.id}...`);
+      const childCyclesResponse = await apiClient.get(
+        `/api/v3/projects/${project.id}/test-cycles`,
+        { params: { parentId: testCycle.id, parentType: 'test-cycle' } }
+      );
+      
+      const childCycles = childCyclesResponse.data || [];
+      console.log(`${indent}  API returned ${childCycles.length} child cycles`);
+      
+      if (childCycles.length > 0) {
+        console.log(`${indent}  ✅ Found ${childCycles.length} nested child cycles`);
+        console.log(`${indent}  Child cycles:`, childCycles.map((c: any) => `${c.name} (ID: ${c.id})`).join(', '));
+        
+        // Recursively process each child cycle
+        for (const childCycle of childCycles) {
+          await processTestCycleRecursively(
+            client,
+            userCache,
+            project,
+            childCycle,
+            currentCyclePath,
+            startDate,
+            endDate,
+            options,
+            allExecutions,
+            depth + 1
+          );
+        }
+      } else {
+        console.log(`${indent}  No nested child cycles found`);
+      }
+    } catch (error: any) {
+      // No child cycles or error fetching them - this is normal for leaf cycles
+      console.log(`${indent}  ❌ Error fetching child cycles: ${error.response?.status} ${error.response?.statusText}`);
+      if (error.response?.data) {
+        console.log(`${indent}     Error details:`, error.response.data);
+      }
+    }
+    
+  } catch (error: any) {
+    console.log(`${indent}  Error processing test cycle: ${error.message}`);
+  }
+}
+
+/**
+ * Recursively process a test suite and its nested child suites
+ */
+async function processTestSuiteRecursively(
+  client: QTestClient,
+  userCache: UserCache,
+  project: QTestProject,
+  testSuite: any,
+  cycleName: string | undefined,
+  parentSuitePath: string,
+  startDate: Date,
+  endDate: Date,
+  options: any,
+  allExecutions: TestExecution[],
+  depth: number = 0
+): Promise<void> {
+  const indent = '  '.repeat(depth + 2);
+  const currentSuitePath = parentSuitePath ? `${parentSuitePath} / ${testSuite.name}` : testSuite.name;
+  
+  console.log(`${indent}Checking test suite: ${testSuite.name} (ID: ${testSuite.id})`);
+  
+  try {
+    // 1. First, check for test runs IN this test suite
+    const testRuns = await client.getTestRunsForSuite(
+      project.id,
+      testSuite.id,
+      options.showAll ? undefined : startDate,
+      options.showAll ? undefined : endDate
+    );
+    
+    console.log(`${indent}  Found ${testRuns.length} test runs (filtered by date)`);
+    
+    // Process test runs for this suite
+    for (const testRun of testRuns) {
+      try {
+        const testLogs = await client.getTestLogsForRun(project.id, testRun.id);
+        
+        for (const testLog of testLogs) {
+          // Use fallback logic for date field
+          const dateValue = testLog.exe_end_date || 
+                            testLog.exe_start_date || 
+                            (testLog.test_step_logs && testLog.test_step_logs[0]?.exe_date);
+          
+          if (!dateValue) {
+            console.warn(`${indent}    Warning: Test log ${testLog.id} has no execution date fields, skipping`);
+            continue;
+          }
+          
+          const executionDateTime = new Date(dateValue);
+          
+          if (isNaN(executionDateTime.getTime())) {
+            console.warn(`${indent}    Warning: Test log ${testLog.id} has invalid date format (${dateValue}), skipping`);
+            continue;
+          }
+          
+          if (executionDateTime >= startDate && executionDateTime <= endDate) {
+            // Extract user information
+            const userId = extractUserId(testLog);
+            let userEmail = 'Unknown';
+            let userName = 'Unknown';
+            
+            if (userId) {
+              try {
+                const userInfo = await userCache.getUserInfo(userId);
+                userEmail = userInfo.email;
+                userName = userInfo.name;
+              } catch (error) {
+                userEmail = `user_${userId}`;
+                userName = `user_${userId}`;
+              }
+            } else if (testLog.submitted_by) {
+              userEmail = testLog.submitted_by;
+              userName = testLog.submitted_by;
+            }
+            
+            let testName = testRun.name || 'Unknown Test';
+            let testCaseId = testRun.test_case_id || testRun.testCaseId || 0;
+            
+            if (testLog.test_case?.id) {
+              testCaseId = testLog.test_case.id;
+              try {
+                const testCase = await client.getTestCase(project.id, testLog.test_case.id);
+                testName = testCase.name || testName;
+              } catch (error) {
+                testName = testRun.name || `Test Case ${testLog.test_case.id}`;
+              }
+            }
+            
+            // Calculate duration in minutes
+            const startDateTime = new Date(testLog.exe_start_date || dateValue);
+            const endDateTime = new Date(testLog.exe_end_date || testLog.exe_start_date || dateValue);
+            const durationMs = endDateTime.getTime() - startDateTime.getTime();
+            const durationMinutes = Math.round(durationMs / 60000 * 100) / 100;
+            
+            allExecutions.push({
+              testName: testName,
+              testCaseId: testCaseId,
+              executionDate: formatDate(executionDateTime),
+              startTime: testLog.exe_start_date || dateValue,
+              endTime: testLog.exe_end_date || testLog.exe_start_date || dateValue,
+              durationMinutes: durationMinutes,
+              status: testLog.status.name,
+              user: userName,
+              userEmail: userEmail,
+              projectName: project.name,
+              testCycle: cycleName,
+              testSuite: currentSuitePath, // Store full suite path
+            });
+          }
+        }
+      } catch (error: any) {
+        if (error.response?.status !== 404) {
+          console.log(`${indent}      Warning: Could not fetch test logs for test run ${testRun.id}: ${error.message}`);
+        }
+      }
+    }
+    
+    // Note: Nested test suite discovery removed - qTest API doesn't support parentType=test-suite
+    // All test suite nesting is now handled at the test cycle level via processTestCycleRecursively
+    
+  } catch (error: any) {
+    console.log(`${indent}  Error processing test suite: ${error.message}`);
+  }
+}
+
+/**
  * Generate test execution report
  */
 async function generateReport() {
@@ -231,14 +573,24 @@ async function generateReport() {
   let projects = await client.getProjects();
   console.log(`Found ${projects.length} projects`);
   
-  // Filter by project ID if specified
-  if (options.projectId) {
-    projects = projects.filter((p) => p.id === options.projectId);
-    if (projects.length === 0) {
-      console.log(`Error: Project ${options.projectId} not found`);
-      return;
+  // Filter by project ID or name if specified
+  if (options.projectId || options.projectName) {
+    if (options.projectId) {
+      projects = projects.filter((p) => p.id === options.projectId);
+      if (projects.length === 0) {
+        console.log(`Error: Project ID ${options.projectId} not found`);
+        return;
+      }
+      console.log(`Filtering to project: ${projects[0].name} (ID: ${options.projectId})`);
+    } else if (options.projectName) {
+      projects = projects.filter((p) => p.name.toLowerCase() === options.projectName!.toLowerCase());
+      if (projects.length === 0) {
+        console.log(`Error: Project "${options.projectName}" not found`);
+        console.log(`Available projects: ${projects.map(p => `"${p.name}" (ID: ${p.id})`).join(', ')}`);
+        return;
+      }
+      console.log(`Filtering to project: ${projects[0].name} (ID: ${projects[0].id})`);
     }
-    console.log(`Filtering to project: ${projects[0].name} (ID: ${options.projectId})`);
   }
   
   // Create user cache for lazy loading (fetch users on demand, not upfront)
@@ -277,133 +629,20 @@ async function generateReport() {
         console.log(`  No test cycles found`);
       }
       
-      // Get test suites from each test cycle
+      // Process each test cycle recursively (this will discover nested cycles, suites, and test runs)
       for (const cycle of testCycles) {
-        console.log(`  Checking test cycle: ${cycle.name} (ID: ${cycle.id})`);
-        
-        try {
-          const suitesResponse = await apiClient.get(
-            `/api/v3/projects/${project.id}/test-suites`,
-            { params: { parentId: cycle.id, parentType: 'test-cycle' } }
-          );
-          
-          const testSuites = suitesResponse.data || [];
-          console.log(`    Found ${testSuites.length} test suites in cycle`);
-          
-          // Process each test suite
-          for (const testSuite of testSuites) {
-            console.log(`    Checking test suite: ${testSuite.name} (ID: ${testSuite.id})`);
-            
-            try {
-              // Use optimized method with date filtering at API level
-              const testRuns = await client.getTestRunsForSuite(
-                project.id,
-                testSuite.id,
-                options.showAll ? undefined : startDate,
-                options.showAll ? undefined : endDate
-              );
-              
-              totalTestRuns += testRuns.length;
-              console.log(`      Found ${testRuns.length} test runs (filtered by date)`);
-              
-              // Process each test run
-              for (const testRun of testRuns) {
-                try {
-                  const testLogs = await client.getTestLogsForRun(project.id, testRun.id);
-                  totalTestLogs += testLogs.length;
-                  
-                  for (const testLog of testLogs) {
-                    // Use fallback logic for date field (handles qTest On-Prem 2024.2.1.1 and other versions)
-                    // Priority: exe_end_date > exe_start_date > test_step_logs[0].exe_date
-                    const dateValue = testLog.exe_end_date || 
-                                      testLog.exe_start_date || 
-                                      (testLog.test_step_logs && testLog.test_step_logs[0]?.exe_date);
-                    
-                    // Validate date before using
-                    if (!dateValue) {
-                      console.warn(`      Warning: Test log ${testLog.id} has no execution date fields, skipping`);
-                      continue;
-                    }
-                    
-                    const executionDateTime = new Date(dateValue);
-                    
-                    // Validate parsed date
-                    if (isNaN(executionDateTime.getTime())) {
-                      console.warn(`      Warning: Test log ${testLog.id} has invalid date format (${dateValue}), skipping`);
-                      continue;
-                    }
-                    
-                    // NOTE: Date filtering is now done at API level (getTestRunsForSuite with date params)
-                    // This is a safety net in case some test logs slip through with dates outside the range
-                    if (executionDateTime >= startDate && executionDateTime <= endDate) {
-                      // Extract user information (lazy loading - only fetch when needed)
-                      const userId = extractUserId(testLog);
-                      let userEmail = 'Unknown';
-                      let userName = 'Unknown';
-                      
-                      if (userId) {
-                        try {
-                          const userInfo = await userCache.getUserInfo(userId);
-                          userEmail = userInfo.email;
-                          userName = userInfo.name;
-                        } catch (error) {
-                          userEmail = `user_${userId}`;
-                          userName = `user_${userId}`;
-                        }
-                      } else if (testLog.submitted_by) {
-                        // Fallback: if submitted_by is an email
-                        userEmail = testLog.submitted_by;
-                        userName = testLog.submitted_by;
-                      }
-                      
-                      let testName = testRun.name || 'Unknown Test';
-                      let testCaseId = testRun.test_case_id || testRun.testCaseId || 0;
-                      
-                      if (testLog.test_case?.id) {
-                        testCaseId = testLog.test_case.id;
-                        try {
-                          const testCase = await client.getTestCase(project.id, testLog.test_case.id);
-                          testName = testCase.name || testName;
-                        } catch (error) {
-                          testName = testRun.name || `Test Case ${testLog.test_case.id}`;
-                        }
-                      }
-                      
-                      // Calculate duration in minutes (with fallback)
-                      const startDateTime = new Date(testLog.exe_start_date || dateValue);
-                      const endDateTime = new Date(testLog.exe_end_date || testLog.exe_start_date || dateValue);
-                      const durationMs = endDateTime.getTime() - startDateTime.getTime();
-                      const durationMinutes = Math.round(durationMs / 60000 * 100) / 100; // Round to 2 decimal places
-                      
-                      allExecutions.push({
-                        testName: testName,
-                        testCaseId: testCaseId,
-                        executionDate: formatDate(executionDateTime),
-                        startTime: testLog.exe_start_date || dateValue,
-                        endTime: testLog.exe_end_date || testLog.exe_start_date || dateValue,
-                        durationMinutes: durationMinutes,
-                        status: testLog.status.name,
-                        user: userName,
-                        userEmail: userEmail,
-                        projectName: project.name,
-                        testCycle: cycle.name,      // Add test cycle name
-                        testSuite: testSuite.name,  // Add test suite name
-                      });
-                    }
-                  }
-                } catch (error: any) {
-                  if (error.response?.status !== 404) {
-                    console.log(`        Warning: Could not fetch test logs for test run ${testRun.id}: ${error.message}`);
-                  }
-                }
-              }
-            } catch (error: any) {
-              console.log(`      Error querying test runs: ${error.message}`);
-            }
-          }
-        } catch (error: any) {
-          console.log(`    Error querying test suites: ${error.message}`);
-        }
+        await processTestCycleRecursively(
+          client,
+          userCache,
+          project,
+          cycle,
+          '', // No parent cycle path yet
+          startDate,
+          endDate,
+          options,
+          allExecutions,
+          0 // depth = 0 for top-level cycles
+        );
       }
       
       // Also check for test suites at project level (not in cycles)
@@ -412,113 +651,21 @@ async function generateReport() {
         if (projectTestSuites.length > 0) {
           console.log(`  Found ${projectTestSuites.length} test suites at project level`);
           
+          // Process each project-level test suite recursively
           for (const testSuite of projectTestSuites) {
-            console.log(`    Checking test suite: ${testSuite.name} (ID: ${testSuite.id})`);
-            
-            try {
-              // Use optimized method with date filtering at API level
-              const testRuns = await client.getTestRunsForSuite(
-                project.id,
-                testSuite.id,
-                options.showAll ? undefined : startDate,
-                options.showAll ? undefined : endDate
-              );
-              
-              totalTestRuns += testRuns.length;
-              console.log(`      Found ${testRuns.length} test runs (filtered by date)`);
-              
-              for (const testRun of testRuns) {
-                try {
-                  const testLogs = await client.getTestLogsForRun(project.id, testRun.id);
-                  totalTestLogs += testLogs.length;
-                  
-                  for (const testLog of testLogs) {
-                    // Use fallback logic for date field (handles qTest On-Prem 2024.2.1.1 and other versions)
-                    // Priority: exe_end_date > exe_start_date > test_step_logs[0].exe_date
-                    const dateValue = testLog.exe_end_date || 
-                                      testLog.exe_start_date || 
-                                      (testLog.test_step_logs && testLog.test_step_logs[0]?.exe_date);
-                    
-                    // Validate date before using
-                    if (!dateValue) {
-                      console.warn(`      Warning: Test log ${testLog.id} has no execution date fields, skipping`);
-                      continue;
-                    }
-                    
-                    const executionDateTime = new Date(dateValue);
-                    
-                    // Validate parsed date
-                    if (isNaN(executionDateTime.getTime())) {
-                      console.warn(`      Warning: Test log ${testLog.id} has invalid date format (${dateValue}), skipping`);
-                      continue;
-                    }
-                    
-                    // NOTE: Date filtering is now done at API level (getTestRunsForSuite with date params)
-                    // This is a safety net in case some test logs slip through with dates outside the range
-                    if (executionDateTime >= startDate && executionDateTime <= endDate) {
-                      // Extract user information (lazy loading - only fetch when needed)
-                      const userId = extractUserId(testLog);
-                      let userEmail = 'Unknown';
-                      let userName = 'Unknown';
-                      
-                      if (userId) {
-                        try {
-                          const userInfo = await userCache.getUserInfo(userId);
-                          userEmail = userInfo.email;
-                          userName = userInfo.name;
-                        } catch (error) {
-                          userEmail = `user_${userId}`;
-                          userName = `user_${userId}`;
-                        }
-                      } else if (testLog.submitted_by) {
-                        // Fallback: if submitted_by is an email
-                        userEmail = testLog.submitted_by;
-                        userName = testLog.submitted_by;
-                      }
-                      
-                      let testName = testRun.name || 'Unknown Test';
-                      let testCaseId = testRun.test_case_id || testRun.testCaseId || 0;
-                      
-                      if (testLog.test_case?.id) {
-                        testCaseId = testLog.test_case.id;
-                        try {
-                          const testCase = await client.getTestCase(project.id, testLog.test_case.id);
-                          testName = testCase.name || testName;
-                        } catch (error) {
-                          testName = testRun.name || `Test Case ${testLog.test_case.id}`;
-                        }
-                      }
-                      
-                      // Calculate duration in minutes
-                      const startDateTime = new Date(testLog.exe_start_date || dateValue);
-                      const endDateTime = new Date(testLog.exe_end_date || testLog.exe_start_date || dateValue);
-                      const durationMs = endDateTime.getTime() - startDateTime.getTime();
-                      const durationMinutes = Math.round(durationMs / 60000 * 100) / 100; // Round to 2 decimal places
-                      
-                      allExecutions.push({
-                        testName: testName,
-                        testCaseId: testCaseId,
-                        executionDate: formatDate(executionDateTime),
-                        startTime: testLog.exe_start_date,
-                        endTime: testLog.exe_end_date,
-                        durationMinutes: durationMinutes,
-                        status: testLog.status.name,
-                        user: userName,
-                        userEmail: userEmail,
-                        projectName: project.name,
-                        testSuite: testSuite.name,  // Add test suite name (no cycle for project-level suites)
-                      });
-                    }
-                  }
-                } catch (error: any) {
-                  if (error.response?.status !== 404) {
-                    console.log(`        Warning: Could not fetch test logs for test run ${testRun.id}: ${error.message}`);
-                  }
-                }
-              }
-            } catch (error: any) {
-              console.log(`      Error querying test runs: ${error.message}`);
-            }
+            await processTestSuiteRecursively(
+              client,
+              userCache,
+              project,
+              testSuite,
+              undefined, // No cycle name for project-level suites
+              '', // No parent suite path
+              startDate,
+              endDate,
+              options,
+              allExecutions,
+              0 // depth = 0 for top-level project suites
+            );
           }
         }
       } catch (error: any) {
